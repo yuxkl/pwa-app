@@ -1,168 +1,151 @@
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
- 
-canvas.width = 360;
-canvas.height = 360;
- 
-const size = 3;
-const cell = canvas.width / size;
+const size = 4; // 4x4のマス目
+const tileSize = 80; // 1マスのサイズ(px)
+const boardEl = document.getElementById('board');
+const messageEl = document.getElementById('message');
+
+let tiles = []; // 画面上のブロック(DOM)を保存する配列
+let state = []; // 内部的な盤面の状態 [y][x] (0は空きマス)
+let isPlaying = true;
 
 // -------------------------------
-// 魔法陣の初期化（ランダム生成）
+// 初期化
 // -------------------------------
-// 3x3の魔法陣の正解パターン（全8通り）
-const validMagicSquares = [
-  [[8, 1, 6], [3, 5, 7], [4, 9, 2]],
-  [[6, 1, 8], [7, 5, 3], [2, 9, 4]],
-  [[8, 3, 4], [1, 5, 9], [6, 7, 2]],
-  [[4, 3, 8], [9, 5, 1], [2, 7, 6]],
-  [[6, 7, 2], [1, 5, 9], [8, 3, 4]],
-  [[2, 7, 6], [9, 5, 1], [4, 3, 8]],
-  [[4, 9, 2], [3, 5, 7], [8, 1, 6]],
-  [[2, 9, 4], [7, 5, 3], [6, 1, 8]]
-];
-
-// 1. ランダムに正解のパターンを1つ選ぶ
-const solution = validMagicSquares[Math.floor(Math.random() * validMagicSquares.length)];
-
-// 2. ヒントとして最初から表示するマスの数（今回は4〜5個のランダム）
-const hintCount = Math.floor(Math.random() * 2) + 4; 
-
-// 3. 0〜8の座標インデックスをシャッフルして、ヒントを出す場所を決める
-const positions = [0, 1, 2, 3, 4, 5, 6, 7, 8].sort(() => Math.random() - 0.5).slice(0, hintCount);
-
-// 4. 空のグリッドを用意し、選ばれた場所に正解の数字をセットする
-let grid = [
-  [null, null, null],
-  [null, null, null],
-  [null, null, null]
-];
-
-positions.forEach(pos => {
-  const y = Math.floor(pos / 3);
-  const x = pos % 3;
-  grid[y][x] = solution[y][x];
-});
- 
-let isComplete = false;
-let glow = 0;
- 
-// -------------------------------
-// 描画
-// -------------------------------
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
- 
-  ctx.strokeStyle = "#0ff";
-  ctx.lineWidth = 3;
- 
-  for (let i = 1; i < size; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * cell, 0);
-    ctx.lineTo(i * cell, canvas.height);
-    ctx.stroke();
- 
-    ctx.beginPath();
-    ctx.moveTo(0, i * cell);
-    ctx.lineTo(canvas.width, i * cell);
-    ctx.stroke();
+function init() {
+  let count = 1;
+  // 1. 完成した状態の2次元配列を作る
+  for (let y = 0; y < size; y++) {
+    state[y] = [];
+    for (let x = 0; x < size; x++) {
+      // 最後のマス(右下)は 0 (空きマス) にする
+      state[y][x] = count < 16 ? count : 0;
+      count++;
+    }
   }
- 
-  ctx.font = "48px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
- 
+
+  // 2. ブロック(DOM要素)を生成する
+  createTiles();
+
+  // 3. 盤面をシャッフルする
+  shuffle();
+
+  // 4. 画面に配置を反映する
+  render();
+}
+
+// -------------------------------
+// ブロック要素の生成
+// -------------------------------
+function createTiles() {
+  for (let i = 1; i <= 15; i++) {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.textContent = i;
+    
+    // タップ（クリック）された時の処理
+    tile.addEventListener('click', () => {
+      if (!isPlaying) return;
+      moveTile(i);
+    });
+
+    boardEl.appendChild(tile);
+    tiles[i] = tile; // 数字をキーにして要素を保存
+  }
+}
+
+// -------------------------------
+// 特定の数字の座標(x, y)を探す
+// -------------------------------
+function findPos(num) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const val = grid[y][x];
-      if (val !== null) {
-        ctx.fillStyle = "#fff";
-        ctx.fillText(val, x * cell + cell / 2, y * cell + cell / 2);
+      if (state[y][x] === num) return { x, y };
+    }
+  }
+}
+
+// -------------------------------
+// ブロックを動かす
+// -------------------------------
+function moveTile(num) {
+  const pos = findPos(num);    // タップされた数字の位置
+  const empty = findPos(0);    // 空きマス(0)の位置
+
+  // タップしたマスと空きマスが隣り合っているか判定
+  // xの差とyの差の合計が1なら隣り合っている（斜めは2になる）
+  const isAdjacent = Math.abs(pos.x - empty.x) + Math.abs(pos.y - empty.y) === 1;
+
+  if (isAdjacent) {
+    // 内部配列の数字を入れ替える
+    state[empty.y][empty.x] = num;
+    state[pos.y][pos.x] = 0;
+    
+    // 画面の見た目を更新
+    render();
+    
+    // クリアしたかチェック
+    checkWin();
+  }
+}
+
+// -------------------------------
+// 画面に状態を描画（CSSのtransformで移動させる）
+// -------------------------------
+function render() {
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const num = state[y][x];
+      if (num !== 0) {
+        const tile = tiles[num];
+        // CSSのtranslateを使って、(x * 80px, y * 80px) の位置へ移動
+        tile.style.transform = `translate(${x * tileSize}px, ${y * tileSize}px)`;
       }
     }
   }
- 
-  if (isComplete) {
-    glow += 0.3;
-    const alpha = Math.sin(glow) * 0.5 + 0.5;
- 
-    ctx.save();
-    ctx.strokeStyle = `rgba(255,255,0,${alpha})`;
-    ctx.shadowColor = "#ff0";
-    ctx.shadowBlur = 25;
-    ctx.lineWidth = 6;
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
- 
-    ctx.font = "bold 40px sans-serif";
-    ctx.fillStyle = `rgba(255,255,0,${alpha})`;
-    ctx.fillText("🎉 おめでとう！ 🎉", canvas.width / 2, canvas.height / 2);
+}
+
+// -------------------------------
+// シャッフル機能（ランダムに動かすシミュレーション）
+// -------------------------------
+function shuffle() {
+  // 300回ランダムにスライドさせてシャッフルする
+  for (let i = 0; i < 300; i++) {
+    const empty = findPos(0);
+    const neighbors = [];
+    
+    // 空きマスの上下左右にある数字をリストアップ
+    if (empty.x > 0) neighbors.push(state[empty.y][empty.x - 1]); // 左
+    if (empty.x < size - 1) neighbors.push(state[empty.y][empty.x + 1]); // 右
+    if (empty.y > 0) neighbors.push(state[empty.y - 1][empty.x]); // 上
+    if (empty.y < size - 1) neighbors.push(state[empty.y + 1][empty.x]); // 下
+
+    // ランダムに選んで入れ替える
+    const randomNum = neighbors[Math.floor(Math.random() * neighbors.length)];
+    const numPos = findPos(randomNum);
+    
+    state[empty.y][empty.x] = randomNum;
+    state[numPos.y][numPos.x] = 0;
   }
 }
- 
+
 // -------------------------------
-// 魔法陣チェック
+// クリア判定
 // -------------------------------
-function isMagicSquare() {
-  const target = 15;
- 
-  if (!grid.flat().every(n => n !== null)) return false;
- 
-  const sums = [];
- 
+function checkWin() {
+  let count = 1;
   for (let y = 0; y < size; y++) {
-    sums.push(grid[y][0] + grid[y][1] + grid[y][2]);
-  }
- 
-  for (let x = 0; x < size; x++) {
-    sums.push(grid[0][x] + grid[1][x] + grid[2][x]);
-  }
- 
-  sums.push(grid[0][0] + grid[1][1] + grid[2][2]);
-  sums.push(grid[0][2] + grid[1][1] + grid[2][0]);
- 
-  return sums.every(s => s === target);
-}
- 
-// -------------------------------
-// クリック入力
-// -------------------------------
-canvas.addEventListener("click", (e) => {
-  if (isComplete) return;
- 
-  const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((e.clientX - rect.left) / cell);
-  const y = Math.floor((e.clientY - rect.top) / cell);
- 
-  const num = prompt("数字を入力 (1〜9)");
-  
-  // キャンセルされた場合や空文字の処理
-  if (num === null || num.trim() === "") return;
-  
-  const n = Number(num);
- 
-  if (n >= 1 && n <= 9) {
-    grid[y][x] = n;
- 
-    if (isMagicSquare()) {
-      isComplete = true;
-      animate();
+    for (let x = 0; x < size; x++) {
+      // 最後の右下マスに来たらループを抜ける
+      if (y === size - 1 && x === size - 1) break;
+      // 1つでも順番が違ったらまだクリアではない
+      if (state[y][x] !== count) return;
+      count++;
     }
- 
-    draw();
   }
-});
- 
-// -------------------------------
-// アニメーションループ
-// -------------------------------
-function animate() {
-  function loop() {
-    if (!isComplete) return;
-    draw();
-    requestAnimationFrame(loop);
-  }
-  loop();
+  
+  // 全て合っていたらクリア処理
+  isPlaying = false;
+  messageEl.textContent = "クリア!";
 }
- 
-draw();
+
+// ゲームスタート
+init();
