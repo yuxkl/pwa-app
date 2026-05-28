@@ -1,11 +1,11 @@
 {
-  "name": "Magic Square",
-  "short_name": "MagicSquare",
+  "name": "スライドパズル 15",
+  "short_name": "15パズル",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#00ffff",
+  "background_color": "#222222",
+  "theme_color": "#222222",
   "icons": [
     {
       "src": "icon-192.png",

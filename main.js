@@ -144,7 +144,7 @@ function checkWin() {
   
   // 全て合っていたらクリア処理
   isPlaying = false;
-  messageEl.textContent = "クリア!";
+  messageEl.textContent = "クリアおめでとう";
 }
 
 // ゲームスタート

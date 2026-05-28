@@ -1,4 +1,6 @@
-const CACHE = "magic-square-v1";
+// キャッシュ名をパズル用に変更（バージョンも管理しやすくします）
+const CACHE = "slide-puzzle-v1";
+
 const FILES = [
   "./",
   "./index.html",
@@ -14,7 +16,17 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys.map(key => {
+          if (key !== CACHE) {
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (event) => {
